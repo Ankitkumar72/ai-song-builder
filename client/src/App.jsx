@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { io } from "socket.io-client";
 
 // --- 1. SOCKET CONNECTION ---
-const URL = import.meta.env.NODE_ENV === 'production' ? undefined : "http://localhost:4000";
+const URL = import.meta.env.PROD ? undefined : "http://localhost:4000";
 // Initialize socket outside component to prevent re-connections
 const socket = io(URL);
 
