@@ -1,0 +1,15 @@
+{
+  "name": "ai-song-builder",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node server/src/app.js",
+    "build": "npm install && cd client && npm install && npm run build",
+    "dev": "nodemon server/src/app.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5"
+  }
+}
