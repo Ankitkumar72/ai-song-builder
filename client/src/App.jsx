@@ -1,8 +1,11 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import { io } from "socket.io-client";
 
 // --- 1. SOCKET CONNECTION ---
-const URL = import.meta.env.PROD ? undefined : "http://localhost:4000";
+// FIX: Switched to window.location check to avoid 'import.meta' errors in ES2015 builds
+const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+const URL = isLocal ? "http://localhost:4000" : undefined;
+
 // Initialize socket outside component to prevent re-connections
 const socket = io(URL);
 
@@ -128,130 +131,77 @@ const ThemeVote = ({ themes, sessionId }) => {
           </div>
         ))}
       </div>
-
-      {votedId && (
-        <div className="mt-8 text-center animate-pulse text-indigo-400 bg-indigo-500/10 py-2 rounded-lg">
-          Waiting for other votes to generate the song...
-        </div>
-      )}
     </div>
   );
 };
 
-const MusicPlayer = ({ song, sessionId }) => {
-  const audioRef = useRef(null);
-  const [speed, setSpeed] = useState(1.0);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [lastDJ, setLastDJ] = useState("You"); // Initial DJ
+const LoadingScreen = ({ vibe }) => {
+  return (
+    <div className="flex flex-col items-center justify-center animate-fade-in-up text-center px-4">
+      <div className="relative w-32 h-32 mb-8">
+        <div className="absolute inset-0 border-t-4 border-indigo-500 rounded-full animate-spin"></div>
+        <div className="absolute inset-4 border-t-4 border-purple-500 rounded-full animate-spin" style={{ animationDirection: "reverse" }}></div>
+        <div className="absolute inset-0 flex items-center justify-center text-4xl">💿</div>
+      </div>
+      <h2 className="text-3xl md:text-4xl font-bold text-white mb-2">Cooking up "{vibe}"</h2>
+      <p className="text-indigo-300 animate-pulse">AI is generating 3 variations...</p>
+    </div>
+  );
+};
 
-  useEffect(() => {
-    // Listen for changes from other users
-    socket.on("remix_update", (data) => {
-      if (data.type === "speed") {
-        setSpeed(data.value);
-        setLastDJ("Another DJ");
-        if (audioRef.current) {
-          audioRef.current.playbackRate = data.value;
-        }
-      }
-    });
+const SongGrid = ({ songs, sessionId }) => {
+  const [votedSongId, setVotedSongId] = useState(null);
 
-    return () => socket.off("remix_update");
-  }, []);
-
-  const togglePlay = () => {
-    if (audioRef.current.paused) {
-      audioRef.current.play();
-      setIsPlaying(true);
-    } else {
-      audioRef.current.pause();
-      setIsPlaying(false);
-    }
-  };
-
-  const changeSpeed = (newSpeed) => {
-    // 1. Update Locally
-    setSpeed(newSpeed);
-    setLastDJ("You");
-    if (audioRef.current) {
-      audioRef.current.playbackRate = newSpeed;
-    }
-
-    // 2. Broadcast to Everyone
-    socket.emit("remix_event", {
-      sessionId,
-      type: "speed",
-      value: newSpeed
-    });
+  const voteForSong = (songId) => {
+    if (votedSongId === songId) return; // Prevent double spam
+    setVotedSongId(songId);
+    socket.emit("vote_song_variation", { sessionId, songId });
   };
 
   return (
-    <div className="w-full max-w-md animate-fade-in-up px-4">
-      <div className="bg-slate-900 rounded-3xl p-6 md:p-8 shadow-[0_0_50px_-12px_rgba(99,102,241,0.25)] border border-slate-800 relative overflow-hidden">
+    <div className="w-full max-w-6xl animate-fade-in-up px-4 pb-10">
+      <div className="text-center mb-10">
+        <h2 className="text-3xl md:text-5xl font-bold text-white mb-4">Which one is the Banger? 🔥</h2>
+        <p className="text-slate-400">Listen to the variations and vote for the best one.</p>
+      </div>
 
-        {/* Background Pulse Effect */}
-        <div className={`absolute inset-0 bg-indigo-600/10 rounded-3xl transition-opacity duration-75 ${isPlaying ? "opacity-100 animate-pulse" : "opacity-0"}`}></div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {songs.map((song) => (
+          <div key={song.id} className="bg-slate-800/60 backdrop-blur border border-slate-700 rounded-2xl p-6 flex flex-col items-center relative overflow-hidden shadow-2xl hover:border-indigo-500/50 transition-colors">
+            
+            {/* Card Header */}
+            <div className="w-20 h-20 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full mb-6 flex items-center justify-center text-3xl shadow-lg shadow-indigo-500/30">
+              🎵
+            </div>
+            
+            <h3 className="text-xl font-bold text-white mb-2 text-center">{song.title}</h3>
+            
+            {/* Audio Player */}
+            <audio controls src={song.url} className="w-full mb-6 h-8 opacity-80 hover:opacity-100 transition-opacity" />
 
-        {/* Album Art / Visualizer */}
-        <div className="relative z-10 aspect-square bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-2xl mb-8 flex items-center justify-center overflow-hidden shadow-lg">
-          <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
-          {/* Spinning Record Animation */}
-          <div className={`w-40 h-40 rounded-full border-4 border-slate-900 bg-black flex items-center justify-center transition-all duration-[2000ms] ${isPlaying ? "animate-[spin_3s_linear_infinite]" : ""}`} style={{ animationDuration: `${3 / speed}s` }}>
-            <div className="w-16 h-16 bg-gradient-to-tr from-indigo-400 to-purple-400 rounded-full flex items-center justify-center">
-              <div className="w-4 h-4 bg-black rounded-full"></div>
+            {/* Vote Button */}
+            <button
+              onClick={() => voteForSong(song.id)}
+              className={`w-full py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-3 group ${
+                votedSongId === song.id 
+                  ? "bg-green-600 text-white shadow-lg shadow-green-500/20" 
+                  : "bg-slate-700 hover:bg-indigo-600 text-white hover:shadow-lg hover:shadow-indigo-500/20"
+              }`}
+            >
+              <span>{votedSongId === song.id ? "✅ Voted" : "🔥 This is Fire"}</span>
+              <span className={`px-2 py-0.5 rounded-full text-sm font-mono ${
+                votedSongId === song.id ? "bg-white/20" : "bg-black/30 group-hover:bg-white/20"
+              }`}>
+                {song.votes}
+              </span>
+            </button>
+
+            {/* Rank Badge (Optional visual flair) */}
+            <div className="absolute top-4 right-4 text-slate-500 font-mono text-xs">
+               #{song.id}
             </div>
           </div>
-        </div>
-
-        <div className="relative z-10 text-center mb-8">
-          <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">{song.songTitle}</h1>
-          <p className="text-slate-400 text-sm md:text-base">
-            Controlled by: <span className="text-indigo-400 font-bold">{lastDJ}</span>
-          </p>
-        </div>
-
-        {/* DJ Controls */}
-        <div className="relative z-10 bg-slate-800/80 backdrop-blur p-4 rounded-xl border border-slate-700 mb-6">
-          <div className="flex justify-between text-xs text-slate-400 mb-2 font-mono">
-            <span>SLOW</span>
-            <span>SPEED: {Math.round(speed * 100)}%</span>
-            <span>FAST</span>
-          </div>
-          <input
-            type="range"
-            min="0.5"
-            max="2.0"
-            step="0.1"
-            value={speed}
-            onChange={(e) => changeSpeed(parseFloat(e.target.value))}
-            className="w-full h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-500 hover:accent-indigo-400 transition-all"
-          />
-        </div>
-
-        <div className="relative z-10 flex gap-4">
-          <button
-            onClick={togglePlay}
-            className={`flex-1 py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-2 ${isPlaying ? "bg-slate-700 text-white" : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/25"}`}
-          >
-            {isPlaying ? "⏸ Play" : "▶ Play"}
-          </button>
-
-          <button
-            onClick={() => window.location.reload()}
-            className="px-6 py-4 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white transition-all"
-            title="New Song"
-          >
-            🔄
-          </button>
-        </div>
-
-        {/* Hidden Audio Element */}
-        <audio
-          ref={audioRef}
-          src={song.audioUrl}
-          onEnded={() => setIsPlaying(false)}
-          onPlay={() => setIsPlaying(true)}
-        />
+        ))}
       </div>
     </div>
   );
@@ -260,33 +210,48 @@ const MusicPlayer = ({ song, sessionId }) => {
 // --- 3. MAIN APP ---
 
 export default function App() {
-  const [phase, setPhase] = useState("input");
-  const [data, setData] = useState(null);
+  const [phase, setPhase] = useState("input"); // input, voting, generating, song_voting
+  const [data, setData] = useState(null); // Generic data holder (themes or songs)
+  const [currentVibe, setCurrentVibe] = useState("");
   const [connected, setConnected] = useState(false);
 
   // ✅ FIX: Generate a random Session ID every time you refresh
-  // This ensures you start clean and avoid the "stuck at phase 2" bug
   const [sessionId] = useState(() => `session_${Math.random().toString(36).substr(2, 9)}`);
 
   useEffect(() => {
     socket.on("connect", () => setConnected(true));
     socket.on("disconnect", () => setConnected(false));
 
+    // Phase 2: Themes Ready
     socket.on("themes_ready", (res) => {
       setData(res.themes);
       setPhase("voting");
     });
 
-    socket.on("song_ready", (res) => {
-      setData(res);
-      setPhase("playing");
+    // Phase 3: Generation Started (Loading)
+    socket.on("generation_started", ({ vibe }) => {
+      setCurrentVibe(vibe);
+      setPhase("generating");
+    });
+
+    // Phase 4: Songs Ready (Grid)
+    socket.on("songs_ready", ({ songs }) => {
+      setData(songs);
+      setPhase("song_voting");
+    });
+
+    // Phase 4 Update: Real-time Vote Counts
+    socket.on("update_song_votes", ({ songs }) => {
+      setData(songs); // Update the songs array with new vote counts
     });
 
     return () => {
       socket.off("connect");
       socket.off("disconnect");
       socket.off("themes_ready");
-      socket.off("song_ready");
+      socket.off("generation_started");
+      socket.off("songs_ready");
+      socket.off("update_song_votes");
     }
   }, []);
 
@@ -314,15 +279,28 @@ export default function App() {
         <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800 border border-slate-700">
           <div className={`w-2 h-2 rounded-full ${connected ? "bg-green-400 animate-pulse" : "bg-red-400"}`}></div>
           <span className="text-xs font-medium text-slate-400 hidden md:inline">{connected ? "Live Connection" : "Offline"}</span>
-          <span className="text-xs font-medium text-slate-400 md:hidden">{connected ? "Live" : "Off"}</span>
         </div>
       </header>
 
       {/* Main Content Area */}
       <main className="relative z-10 flex-1 flex flex-col items-center justify-center w-full p-4 md:p-6">
-        {phase === "input" && <LyricInput sessionId={sessionId} />}
-        {phase === "voting" && <ThemeVote sessionId={sessionId} themes={data} />}
-        {phase === "playing" && <MusicPlayer song={data} sessionId={sessionId} />}
+        
+        {phase === "input" && (
+            <LyricInput sessionId={sessionId} />
+        )}
+
+        {phase === "voting" && (
+            <ThemeVote sessionId={sessionId} themes={data} />
+        )}
+
+        {phase === "generating" && (
+            <LoadingScreen vibe={currentVibe} />
+        )}
+
+        {phase === "song_voting" && (
+            <SongGrid songs={data} sessionId={sessionId} />
+        )}
+
       </main>
 
       {/* Animation Styles */}
