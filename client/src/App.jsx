@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { io } from "socket.io-client";
 
-// 1. SOCKET CONNECTION
+// --- 1. SOCKET CONNECTION ---
 const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
 const URL = isLocal ? "http://localhost:4000" : undefined;
 const socket = io(URL);
 
-// --- SUB-COMPONENTS ---
+// --- 2. SUB-COMPONENTS ---
 
 const Lobby = ({ onJoin }) => {
   const [room, setRoom] = useState("");
@@ -21,7 +21,7 @@ const Lobby = ({ onJoin }) => {
   return (
     <div className="w-full max-w-md animate-fade-in-up px-4 text-center">
       <h2 className="text-4xl font-bold text-white mb-2">Welcome, Creator</h2>
-      <p className="text-slate-400 mb-8">Join a room to start building music.</p>
+      <p className="text-slate-400 mb-8">Enter a Room Code to join your crew.</p>
       
       <div className="bg-slate-800/50 p-8 rounded-2xl border border-slate-700 shadow-2xl">
         <form onSubmit={handleJoin} className="space-y-4">
@@ -50,9 +50,9 @@ const Lobby = ({ onJoin }) => {
   );
 };
 
-const LyricInput = ({ sessionId }) => {
+// Updated LyricInput to accept 'globalLyrics' prop
+const LyricInput = ({ sessionId, globalLyrics }) => {
   const [text, setText] = useState("");
-  const [submittedCount, setSubmittedCount] = useState(0);
   
   const submit = (e) => {
     e.preventDefault();
@@ -60,17 +60,21 @@ const LyricInput = ({ sessionId }) => {
     if (!trimmed) return;
     socket.emit("submit_lyric", { sessionId, lyric: trimmed });
     setText("");
-    setSubmittedCount((prev) => prev + 1);
   };
+
+  // Calculate progress based on GLOBAL data, not local state
+  const progressPercent = Math.min(100, (globalLyrics.length / 3) * 100);
 
   return (
     <div className="w-full max-w-xl animate-fade-in-up px-4">
       <div className="bg-slate-800/50 backdrop-blur-md border border-slate-700 p-6 md:p-8 rounded-2xl shadow-2xl">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-2">
-          <h3 className="text-xl md:text-2xl font-bold text-white">Phase 1: Inspiration</h3>
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-2xl font-bold text-white">Phase 1: Inspiration</h3>
           <span className="px-3 py-1 bg-indigo-500/20 text-indigo-300 text-xs font-mono rounded-full">Room: {sessionId}</span>
         </div>
-        <p className="text-slate-400 mb-6 text-sm md:text-base">Submit lyrics to train the AI.</p>
+        
+        <p className="text-slate-400 mb-6">Submit lyrics to train the AI.</p>
+        
         <form onSubmit={submit} className="relative w-full mb-8">
           <input
             className="w-full bg-slate-900 border border-slate-700 text-white p-4 pr-24 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all placeholder:text-slate-600"
@@ -78,19 +82,32 @@ const LyricInput = ({ sessionId }) => {
             onChange={(e) => setText(e.target.value)}
             placeholder="e.g. Neon lights..."
           />
-          <button className="absolute right-2 top-2 bottom-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 md:px-6 rounded-lg font-bold text-sm md:text-base">
+          <button className="absolute right-2 top-2 bottom-2 bg-indigo-600 hover:bg-indigo-500 text-white px-6 rounded-lg font-bold">
             Send
           </button>
         </form>
-        <div className="flex items-center gap-3">
-          <div className="h-2 flex-1 bg-slate-700 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-500"
-              style={{ width: `${Math.min(100, (submittedCount / 3) * 100)}%` }}
-            ></div>
+
+        {/* Shared Progress Bar */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-3">
+            <div className="h-2 flex-1 bg-slate-700 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-500"
+                style={{ width: `${progressPercent}%` }}
+              ></div>
+            </div>
+            <span className="text-xs text-slate-500 font-mono">{globalLyrics.length}/3 sent</span>
           </div>
-          <span className="text-xs text-slate-500 font-mono">{submittedCount}/3 sent</span>
+          
+          {/* LIVE FEED: Show the last submitted lyric so users know it's working */}
+          {globalLyrics.length > 0 && (
+            <div className="text-center mt-4">
+              <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Latest Submission:</p>
+              <p className="text-indigo-300 italic">"{globalLyrics[globalLyrics.length - 1].lyric}"</p>
+            </div>
+          )}
         </div>
+
       </div>
     </div>
   );
@@ -106,7 +123,7 @@ const ThemeVote = ({ themes, sessionId }) => {
 
   return (
     <div className="w-full max-w-5xl animate-fade-in-up px-4 text-center">
-      <h2 className="text-3xl md:text-4xl font-bold text-white mb-8">Vote for the Vibe</h2>
+      <h2 className="text-4xl font-bold text-white mb-8">Vote for the Vibe</h2>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {themes && themes.map((t) => (
           <div
@@ -118,7 +135,7 @@ const ThemeVote = ({ themes, sessionId }) => {
                 : "border-slate-700 bg-slate-800 hover:border-indigo-500"
             }`}
           >
-            <span className="text-xl md:text-2xl font-bold text-white capitalize">{t.text}</span>
+            <span className="text-2xl font-bold text-white capitalize">{t.text}</span>
           </div>
         ))}
       </div>
@@ -133,7 +150,7 @@ const LoadingScreen = ({ vibe }) => (
       <div className="absolute inset-4 border-t-4 border-purple-500 rounded-full animate-spin" style={{ animationDirection: "reverse" }}></div>
       <div className="absolute inset-0 flex items-center justify-center text-4xl">💿</div>
     </div>
-    <h2 className="text-2xl md:text-4xl font-bold text-white mb-2">Cooking up "{vibe}"</h2>
+    <h2 className="text-3xl md:text-4xl font-bold text-white mb-2">Cooking up "{vibe}"</h2>
     <p className="text-indigo-300 animate-pulse">AI is generating 3 variations...</p>
   </div>
 );
@@ -160,10 +177,10 @@ const SongGrid = ({ songs, sessionId, endTime }) => {
   return (
     <div className="w-full max-w-6xl animate-fade-in-up px-4 pb-10">
       <div className="text-center mb-10">
-        <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">Vote the Banger 🔥</h2>
+        <h2 className="text-5xl font-bold text-white mb-4">Vote the Banger 🔥</h2>
         <div className="inline-block bg-slate-800 border border-slate-600 px-6 py-2 rounded-full">
-           <span className="text-slate-400 mr-2 text-sm md:text-base">Voting ends in:</span>
-           <span className={`font-mono text-lg md:text-xl font-bold ${timeLeft < 5 ? "text-red-500 animate-pulse" : "text-white"}`}>
+           <span className="text-slate-400 mr-2">Voting ends in:</span>
+           <span className={`font-mono text-xl font-bold ${timeLeft < 5 ? "text-red-500 animate-pulse" : "text-white"}`}>
              00:{timeLeft.toString().padStart(2, '0')}
            </span>
         </div>
@@ -174,7 +191,7 @@ const SongGrid = ({ songs, sessionId, endTime }) => {
           <div key={song.id} className="bg-slate-800/60 backdrop-blur border border-slate-700 rounded-2xl p-6 flex flex-col items-center shadow-2xl">
             <div className="w-20 h-20 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full mb-6 flex items-center justify-center text-3xl">🎵</div>
             <h3 className="text-xl font-bold text-white mb-2">{song.title}</h3>
-            <audio controls src={song.url} className="w-full mb-6 h-10" />
+            <audio controls src={song.url} className="w-full mb-6 h-12 md:h-14 accent-indigo-500" />
             <button onClick={() => voteForSong(song.id)}
               className={`w-full py-4 rounded-xl font-bold text-lg flex justify-center gap-3 ${
                 votedSongId === song.id ? "bg-green-600 text-white" : "bg-slate-700 hover:bg-indigo-600 text-white"
@@ -189,31 +206,20 @@ const SongGrid = ({ songs, sessionId, endTime }) => {
   );
 };
 
-// --- FIX: RESPONSIVE WINNER SCREEN ---
 const WinnerScreen = ({ song, sessionId }) => (
   <div className="w-full max-w-3xl text-center animate-fade-in-up px-4">
-    <div className="text-6xl md:text-7xl mb-4 md:mb-6 animate-bounce">🏆</div>
-    <h1 className="text-5xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500 mb-6 md:mb-8">
-      WINNER!
-    </h1>
-    <div className="bg-slate-800/80 backdrop-blur-xl p-6 md:p-12 rounded-3xl border-2 border-yellow-500/30 w-full">
-      <h2 className="text-2xl md:text-4xl font-bold text-white mb-4 break-words">{song.title}</h2>
-      <div className="inline-block bg-yellow-500/10 text-yellow-400 px-4 py-1 rounded-full font-mono text-sm mb-6 md:mb-8">
-        {song.votes} VOTES
-      </div>
+    <div className="text-7xl mb-6 animate-bounce">🏆</div>
+    <h1 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500 mb-8">WINNER!</h1>
+    <div className="bg-slate-800/80 backdrop-blur-xl p-12 rounded-3xl border-2 border-yellow-500/30">
+      <h2 className="text-4xl font-bold text-white mb-4">{song.title}</h2>
+      <div className="inline-block bg-yellow-500/10 text-yellow-400 px-4 py-1 rounded-full font-mono text-sm mb-8">{song.votes} VOTES</div>
       
-      {/* Bigger Audio Player for Mobile */}
       <div className="w-full mb-8 flex justify-center">
-         <audio 
-            controls 
-            src={song.url} 
-            className="w-full h-12 md:h-14 accent-indigo-500" 
-            autoPlay 
-         />
+         <audio controls src={song.url} className="w-full h-14 accent-indigo-500" autoPlay />
       </div>
 
       <button onClick={() => socket.emit("restart_game", { sessionId })}
-        className="w-full py-4 md:py-5 bg-indigo-600 hover:bg-indigo-500 rounded-2xl font-bold text-lg md:text-xl text-white shadow-xl">
+        className="w-full py-5 bg-indigo-600 hover:bg-indigo-500 rounded-2xl font-bold text-xl text-white shadow-xl">
         🔄 Start New Round
       </button>
     </div>
@@ -223,7 +229,7 @@ const WinnerScreen = ({ song, sessionId }) => (
 const LogoHeader = ({ connected }) => {
   const [imgError, setImgError] = useState(false);
   return (
-    <header className="p-4 md:p-6 flex items-center justify-between w-full border-b border-white/5 bg-[#0f172a]/80 backdrop-blur-sm sticky top-0 z-20">
+    <header className="p-6 flex items-center justify-between w-full border-b border-white/5 bg-[#0f172a]/80 backdrop-blur-sm sticky top-0 z-20">
       <div className="flex items-center gap-3">
         <div className="w-8 h-8 rounded-lg shadow-lg shadow-indigo-500/20 overflow-hidden flex-shrink-0">
           {!imgError ? (
@@ -232,7 +238,7 @@ const LogoHeader = ({ connected }) => {
             <div className="w-full h-full bg-gradient-to-br from-indigo-500 to-purple-600"></div>
           )}
         </div>
-        <h1 className="text-lg md:text-xl font-bold text-white tracking-tight">AI Song Builder</h1>
+        <h1 className="text-xl font-bold text-white tracking-tight">AI Song Builder</h1>
       </div>
       <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800 border border-slate-700">
         <div className={`w-2 h-2 rounded-full ${connected ? "bg-green-400 animate-pulse" : "bg-red-400"}`}></div>
@@ -245,12 +251,11 @@ const LogoHeader = ({ connected }) => {
 // --- 3. MAIN APP ---
 
 export default function App() {
-  const [phase, setPhase] = useState("lobby"); 
-  const [data, setData] = useState(null);
+  const [phase, setPhase] = useState("lobby");
+  const [data, setData] = useState(null); // Use this for Themes OR Songs
+  const [lyrics, setLyrics] = useState([]); // NEW: Store Lyrics Globally
   const [currentVibe, setCurrentVibe] = useState("");
   const [endTime, setEndTime] = useState(0);
-  
-  // New Lobby State
   const [sessionId, setSessionId] = useState("");
   const [connected, setConnected] = useState(false);
 
@@ -258,14 +263,37 @@ export default function App() {
     socket.on("connect", () => setConnected(true));
     socket.on("disconnect", () => setConnected(false));
 
-    socket.on("sync_state", () => {});
+    // SYNC STATE: When joining (access code), restore the correct phase and data
+    socket.on("sync_state", (state) => {
+      if (state.lyrics) setLyrics(state.lyrics);
+      
+      if (state.songs && state.songs.length > 0) {
+        // If game is already in voting phase
+        setData(state.songs);
+        setPhase("song_voting");
+      } else if (state.themes && state.themes.length > 0) {
+        // If game is in theme voting
+        setData(state.themes);
+        setPhase("voting");
+      } else {
+        // Default to input
+        setPhase("input");
+      }
+    });
+
+    // REAL-TIME LISTENERS
+    socket.on("new_lyric", ({ lyric }) => {
+      // Add new lyric to list so everyone sees progress bar jump
+      setLyrics(prev => [...prev, { lyric }]); 
+    });
 
     socket.on("themes_ready", (res) => { setData(res.themes); setPhase("voting"); });
     socket.on("generation_started", ({ vibe }) => { setCurrentVibe(vibe); setPhase("generating"); });
     socket.on("songs_ready", ({ songs, endTime }) => { setData(songs); setEndTime(endTime); setPhase("song_voting"); });
     socket.on("update_song_votes", ({ songs }) => setData(songs));
     socket.on("game_winner", ({ winner }) => { setData(winner); setPhase("winner"); });
-    socket.on("game_reset", () => { setPhase("input"); setData(null); });
+    socket.on("game_reset", () => { setPhase("input"); setData(null); setLyrics([]); });
+    
     socket.on("voting_failed", ({ message, themes }) => {
       alert(message);
       setData(themes); 
@@ -278,7 +306,8 @@ export default function App() {
   const joinRoom = (roomCode, user) => {
     setSessionId(roomCode);
     socket.emit("join_room", { sessionId: roomCode, username: user });
-    setPhase("input"); 
+    // Note: We don't force setPhase("input") here anymore. 
+    // We rely on "sync_state" to tell us where the room is.
   };
 
   return (
@@ -287,10 +316,16 @@ export default function App() {
       
       <main className="flex-1 flex flex-col items-center justify-center w-full p-6">
         {phase === "lobby" && <Lobby onJoin={joinRoom} />}
-        {phase === "input" && <LyricInput sessionId={sessionId} />}
+        
+        {/* Pass the global 'lyrics' list to Input so progress bar syncs */}
+        {phase === "input" && <LyricInput sessionId={sessionId} globalLyrics={lyrics} />}
+        
         {phase === "voting" && <ThemeVote sessionId={sessionId} themes={data} />}
+        
         {phase === "generating" && <LoadingScreen vibe={currentVibe} />}
+        
         {phase === "song_voting" && <SongGrid songs={data} sessionId={sessionId} endTime={endTime} />}
+        
         {phase === "winner" && <WinnerScreen song={data} sessionId={sessionId} />}
       </main>
 
