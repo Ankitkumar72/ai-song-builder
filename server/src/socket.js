@@ -6,7 +6,7 @@ let sessionData = {};
 // --- SETTINGS ---
 const LYRIC_THRESHOLD = 3;       
 const THEME_VOTE_THRESHOLD = 1;  
-const VOTING_DURATION_MS = 15000; 
+const VOTING_DURATION_MS = 5000; 
 
 function startSocket(server) {
   const io = new Server(server, {
