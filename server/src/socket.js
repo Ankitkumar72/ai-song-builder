@@ -1,4 +1,5 @@
 const { Server } = require('socket.io');
+const { generateSongs } = require('./aiService'); 
 
 // --- STATE MANAGEMENT ---
 let sessionData = {};
@@ -16,15 +17,21 @@ function startSocket(server) {
   io.on('connection', (socket) => {
     console.log('✅ Client connected:', socket.id);
 
-    // 0. JOIN ROOM (CRITICAL NEW STEP)
+    // 0. JOIN ROOM (UPDATED FOR TOGGLING)
     socket.on('join_room', ({ sessionId, username }) => {
-      socket.join(sessionId); // Socket.io native room joining
-      console.log(`👤 ${username} joined room: ${sessionId}`);
+      // 1. Leave all previous rooms first! (Critical for toggling)
+      socket.rooms.forEach(room => {
+        if (room !== socket.id) socket.leave(room);
+      });
+
+      // 2. Join new room
+      socket.join(sessionId);
+      console.log(`👤 ${username} switched to room: ${sessionId}`);
       
-      // If session doesn't exist, create it
+      // 3. Create session if missing
       if (!sessionData[sessionId]) initSession(sessionId);
       
-      // Send current state to ONLY this user (so they sync up if joining late)
+      // 4. Send state
       socket.emit('sync_state', sessionData[sessionId]);
     });
 
@@ -33,45 +40,42 @@ function startSocket(server) {
       if (!sessionData[sessionId]) initSession(sessionId);
 
       sessionData[sessionId].lyrics.push({ lyric, id: socket.id });
-      
-      // Broadcast ONLY to this room
       io.to(sessionId).emit('new_lyric', { sessionId, lyric });
 
       if (sessionData[sessionId].lyrics.length >= LYRIC_THRESHOLD) {
         const rawLyrics = sessionData[sessionId].lyrics.map(l => l.lyric);
         const themes = extractThemes(rawLyrics);
         sessionData[sessionId].themes = themes;
-        
         io.to(sessionId).emit('themes_ready', { sessionId, themes });
       }
     });
 
     // 2. HANDLE THEME VOTES
-    socket.on('theme_vote', ({ sessionId, themeId }) => {
+    socket.on('theme_vote', async ({ sessionId, themeId }) => { 
       if (!sessionData[sessionId]) return;
+      if (sessionData[sessionId].isGenerating) return;
+
       const votes = sessionData[sessionId].votes;
       votes[themeId] = (votes[themeId] || 0) + 1;
 
       const totalVotes = Object.values(votes).reduce((a, b) => a + b, 0);
       
       if (totalVotes >= THEME_VOTE_THRESHOLD) {
+        sessionData[sessionId].isGenerating = true;
+
         let winnerId = Object.keys(votes).reduce((a, b) => votes[a] > votes[b] ? a : b);
         const vibeText = sessionData[sessionId].themes.find(t => t.id === winnerId)?.text || "Vibe";
         
         io.to(sessionId).emit('generation_started', { sessionId, vibe: vibeText });
 
-        setTimeout(() => {
-          const variations = [
-            { id: 1, title: `${vibeText} - Chill`, url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", votes: 0 },
-            { id: 2, title: `${vibeText} - Hype`, url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3", votes: 0 },
-            { id: 3, title: `${vibeText} - Bass`, url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3", votes: 0 }
-          ];
+        try {
+          const variations = await generateSongs(vibeText); 
+          sessionData[sessionId].isGenerating = false;
           sessionData[sessionId].songs = variations;
 
           const endTime = Date.now() + VOTING_DURATION_MS;
           io.to(sessionId).emit('songs_ready', { sessionId, songs: variations, endTime });
 
-          // 🕒 TIMER ENDS
           setTimeout(() => {
             const currentSongs = sessionData[sessionId].songs;
             const totalSongVotes = currentSongs.reduce((acc, s) => acc + s.votes, 0);
@@ -79,7 +83,6 @@ function startSocket(server) {
             if (totalSongVotes === 0) {
               sessionData[sessionId].votes = {}; 
               sessionData[sessionId].songs = [];
-              
               io.to(sessionId).emit('voting_failed', { 
                 sessionId, 
                 themes: sessionData[sessionId].themes,
@@ -90,7 +93,11 @@ function startSocket(server) {
               io.to(sessionId).emit('game_winner', { sessionId, winner });
             }
           }, VOTING_DURATION_MS);
-        }, 3000);
+
+        } catch (error) {
+          console.error("AI Gen Error", error);
+          sessionData[sessionId].isGenerating = false;
+        }
       }
     });
 
@@ -117,7 +124,7 @@ function startSocket(server) {
 }
 
 function initSession(id) {
-  sessionData[id] = { lyrics: [], votes: {}, themes: [], songs: [] };
+  sessionData[id] = { lyrics: [], votes: {}, themes: [], songs: [], isGenerating: false };
 }
 
 function extractThemes(lyrics) {
