@@ -1,8 +1,9 @@
 import { io } from "socket.io-client";
 
-// YOUR BACKEND URL (correct)
-export const socket = io("http://localhost:4000", {
+const URL = import.meta.env.PROD ? undefined : 'http://localhost:4000';
+
+export const socket = io(URL, {
   transports: ["websocket", "polling"],
-  
 });
+
 window.__SOCKET = socket;
